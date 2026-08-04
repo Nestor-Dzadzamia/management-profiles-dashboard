@@ -9,4 +9,4 @@ class Settings(BaseSettings):
     jtw_ttl_seconds: int = 3600
 
 
-settings = Settings() # type: ignore[call-arg]
+settings = Settings()  # type: ignore[call-arg]
