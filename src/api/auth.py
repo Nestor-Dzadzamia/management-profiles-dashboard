@@ -3,7 +3,7 @@ from fastapi import APIRouter, HTTPException, status
 from api.deps import AuthServiceDep, SessionDep
 from config import get_settings
 from schemas.auth import Token, UserCreate, UserLogin, UserRead
-from services.auth import InvalidCredentialsError, LoginTakenError
+from services.user import InvalidCredentialsError, LoginTakenError
 
 router = APIRouter(tags=["auth"])
 

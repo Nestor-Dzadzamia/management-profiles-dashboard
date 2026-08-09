@@ -5,10 +5,8 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth import decode_access_token
-from db.models import User
 from db.session import get_session
-from repositories.user import UserRepository
-from services.auth import AuthService
+from services.user import AuthService, UserDTO, UserRepository
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -32,7 +30,7 @@ AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
 async def get_current_user(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
     users: UserRepositoryDep,
-) -> User:
+) -> UserDTO:
     if credentials is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Not authenticated")
 
@@ -47,4 +45,4 @@ async def get_current_user(
     return user
 
 
-CurrentUser = Annotated[User, Depends(get_current_user)]
+CurrentUser = Annotated[UserDTO, Depends(get_current_user)]
