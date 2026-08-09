@@ -6,7 +6,7 @@ class Settings(BaseSettings):
 
     database_url: str
     jwt_secret: str
-    jtw_ttl_seconds: int = 3600
+    jwt_ttl_seconds: int = 3600
 
 
 settings = Settings()  # type: ignore[call-arg]
