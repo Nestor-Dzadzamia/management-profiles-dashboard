@@ -5,7 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 class UserCreate(BaseModel):
     login: str = Field(min_length=3, max_length=50)
-    password: str = Field(min_length=3, max_length=50)
+    password: str = Field(min_length=8, max_length=72)
     repeat_password: str
 
     @model_validator(mode="after")

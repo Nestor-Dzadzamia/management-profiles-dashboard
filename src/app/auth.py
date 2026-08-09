@@ -1,28 +1,20 @@
 from datetime import UTC, datetime, timedelta
 
+import bcrypt
 import jwt
-from argon2 import PasswordHasher
-from argon2.exceptions import InvalidHashError, VerificationError
 
 from app.config import settings
-
-_hasher = PasswordHasher()
 
 ALGORITHM = "HS256"
 TOKEN_TYPE = "access"
 
 
 def hash_password(password: str) -> str:
-    return _hasher.hash(password)
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
 
 def verify_password(password: str, password_hash: str) -> bool:
-    try:
-        _hasher.verify(password_hash, password)
-    except (VerificationError, InvalidHashError):
-        return False
-    return True
-
+    return bcrypt.checkpw(password.encode(), password_hash.encode())
 
 def create_access_token(user_id: int) -> str:
     now = datetime.now(UTC)
