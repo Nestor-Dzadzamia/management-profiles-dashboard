@@ -8,6 +8,9 @@ on:
 jobs:
   lint-and-test:
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql+asyncpg://app:app@localhost:5432/dashboard
+      JWT_SECRET: ci-secret-not-used-for-anything
     steps:
       - uses: actions/checkout@v4
 
