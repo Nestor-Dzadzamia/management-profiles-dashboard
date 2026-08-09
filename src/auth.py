@@ -3,7 +3,7 @@ from datetime import UTC, datetime, timedelta
 import bcrypt
 import jwt
 
-from app.config import settings
+from config import get_settings
 
 ALGORITHM = "HS256"
 TOKEN_TYPE = "access"
@@ -22,9 +22,9 @@ def create_access_token(user_id: int) -> str:
         "sub": str(user_id),
         "type": TOKEN_TYPE,
         "iat": now,
-        "exp": now + timedelta(seconds=settings.jwt_ttl_seconds),
+        "exp": now + timedelta(seconds=get_settings().jwt_ttl_seconds),
     }
-    return jwt.encode(payload, settings.jwt_secret, algorithm=ALGORITHM)
+    return jwt.encode(payload, get_settings().jwt_secret, algorithm=ALGORITHM)
 
 
 def decode_access_token(token: str) -> int | None:
@@ -33,7 +33,7 @@ def decode_access_token(token: str) -> int | None:
     try:
         payload = jwt.decode(
             token,
-            settings.jwt_secret,
+            get_settings().jwt_secret,
             algorithms=[ALGORITHM],
             options={"require": ["exp", "sub", "type"]},
         )

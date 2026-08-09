@@ -1,9 +1,9 @@
 from fastapi import APIRouter, HTTPException, status
 
-from app.api.deps import AuthServiceDep, SessionDep
-from app.config import settings
-from app.schemas.auth import Token, UserCreate, UserLogin, UserRead
-from app.services.auth import InvalidCredentialsError, LoginTakenError
+from api.deps import AuthServiceDep, SessionDep
+from config import get_settings
+from schemas.auth import Token, UserCreate, UserLogin, UserRead
+from services.auth import InvalidCredentialsError, LoginTakenError
 
 router = APIRouter(tags=["auth"])
 
@@ -30,4 +30,4 @@ async def login(payload: UserLogin, service: AuthServiceDep) -> Token:
     except InvalidCredentialsError:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid credentials") from None
 
-    return Token(access_token=token, expires_in=settings.jwt_ttl_seconds)
+    return Token(access_token=token, expires_in=get_settings().jwt_ttl_seconds)

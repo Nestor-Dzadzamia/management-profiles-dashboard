@@ -1,3 +1,5 @@
+from functools import lru_cache
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -9,4 +11,7 @@ class Settings(BaseSettings):
     jwt_ttl_seconds: int = 3600
 
 
-settings = Settings()  # type: ignore[call-arg]
+@lru_cache
+def get_settings() -> Settings:
+    return Settings() # type: ignore[call-arg]
+

@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 
-from app.api import auth
+from api import auth
 
 app = FastAPI(title="Project Dashboard")
 

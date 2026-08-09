@@ -1,6 +1,6 @@
-from app.auth import create_access_token, hash_password, verify_password
-from app.db.models import User
-from app.repositories.user import UserRepository
+from auth import create_access_token, hash_password, verify_password
+from db.models import User
+from repositories.user import UserRepository
 
 
 class LoginTakenError(Exception):
