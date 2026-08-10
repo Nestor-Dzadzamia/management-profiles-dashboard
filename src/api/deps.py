@@ -6,8 +6,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth import decode_access_token
 from db.session import get_session
+from services.document import DocumentRepository, DocumentService
 from services.project import ProjectRepository, ProjectService
 from services.user import AuthService, UserDTO, UserRepository
+from storage import Storage
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -53,11 +55,32 @@ def get_project_repository(session: SessionDep) -> ProjectRepository:
     return ProjectRepository(session)
 
 
+def get_storage() -> Storage:
+    return Storage()
+
+
+StorageDep = Annotated[Storage, Depends(get_storage)]
+
+
 ProjectRepositoryDep = Annotated[ProjectRepository, Depends(get_project_repository)]
 
 
-def get_project_service(projects: ProjectRepositoryDep) -> ProjectService:
-    return ProjectService(projects)
+def get_project_service(projects: ProjectRepositoryDep, storage: StorageDep) -> ProjectService:
+    return ProjectService(projects, storage)
 
 
 ProjectServiceDep = Annotated[ProjectService, Depends(get_project_service)]
+
+
+def get_document_repository(session: SessionDep) -> DocumentRepository:
+    return DocumentRepository(session)
+
+
+DocumentRepositoryDep = Annotated[DocumentRepository, Depends(get_document_repository)]
+
+
+def get_document_service(documents: DocumentRepositoryDep, storage: StorageDep) -> DocumentService:
+    return DocumentService(documents, storage)
+
+
+DocumentServiceDep = Annotated[DocumentService, Depends(get_document_service)]

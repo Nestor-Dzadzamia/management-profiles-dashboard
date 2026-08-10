@@ -5,6 +5,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.models import Document, Project, ProjectMember, Role
+from storage import Storage
 
 OWNER = "owner"
 PARTICIPANT = "participant"
@@ -105,6 +106,12 @@ class ProjectRepository:
     async def get_membership(self, project_id: int, user_id: int) -> ProjectMember | None:
         return await self._session.get(ProjectMember, (user_id, project_id))
 
+    async def get_document_keys(self, project_id: int) -> list[str]:
+        result = await self._session.execute(
+            select(Document.s3_key).where(Document.project_id == project_id)
+        )
+        return list(result.scalars().all())
+
 
 @dataclass(frozen=True)
 class MemberDTO:
@@ -115,8 +122,9 @@ class MemberDTO:
 
 
 class ProjectService:
-    def __init__(self, projects: ProjectRepository) -> None:
+    def __init__(self, projects: ProjectRepository, storage: Storage) -> None:
         self._projects = projects
+        self._storage = storage
 
     async def _to_dto(self, project: Project, role: str) -> ProjectDTO:
         return ProjectDTO(
@@ -172,7 +180,11 @@ class ProjectService:
         role = await self._require_access(project_id, user_id)
         if role != OWNER:
             raise NotProjectOwnerError
+
+        keys = await self._projects.get_document_keys(project_id)
         await self._projects.delete(project_id)
+        for key in keys:
+            self._storage.delete(key)
 
     async def invite(self, project_id: int, ower_id: int, invitee_id: int) -> MemberDTO:
         role = await self._require_access(project_id, ower_id)
