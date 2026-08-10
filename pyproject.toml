@@ -22,6 +22,8 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "boto3-stubs>=1.43.68",
+    "botocore-stubs>=1.43.67",
     "httpx2>=2.9.1",
     "mypy>=2.3.0",
     "pytest>=9.1.1",
@@ -38,6 +40,17 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = [
+    "fastapi.File",
+    "fastapi.Form",
+    "fastapi.Query",
+    "fastapi.Path",
+    "fastapi.Body",
+    "fastapi.Depends",
+]
+
 
 [tool.mypy]
 python_version = "3.12"
