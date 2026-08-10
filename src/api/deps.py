@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth import decode_access_token
 from db.session import get_session
+from services.project import ProjectRepository, ProjectService
 from services.user import AuthService, UserDTO, UserRepository
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -46,3 +47,17 @@ async def get_current_user(
 
 
 CurrentUser = Annotated[UserDTO, Depends(get_current_user)]
+
+
+def get_project_repository(session: SessionDep) -> ProjectRepository:
+    return ProjectRepository(session)
+
+
+ProjectRepositoryDep = Annotated[ProjectRepository, Depends(get_project_repository)]
+
+
+def get_project_service(projects: ProjectRepositoryDep) -> ProjectService:
+    return ProjectService(projects)
+
+
+ProjectServiceDep = Annotated[ProjectService, Depends(get_project_service)]
