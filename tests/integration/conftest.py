@@ -7,7 +7,7 @@ os.environ["S3_ACCESS_KEY"] = "minioadmin"
 os.environ["S3_SECRET_KEY"] = "minioadmin"
 os.environ["S3_BUCKET"] = "test-documents"
 
-from collections.abc import AsyncGenerator  # noqa: E402
+from collections.abc import AsyncGenerator, Generator  # noqa: E402
 
 import pytest  # noqa: E402
 from httpx2 import ASGITransport, AsyncClient  # noqa: E402
@@ -22,6 +22,7 @@ from config import get_settings  # noqa: E402
 from db.base import Base  # noqa: E402
 from db.session import get_session  # noqa: E402
 from main import app  # noqa: E402
+from storage import get_s3_client  # noqa: E402
 
 
 @pytest.fixture
@@ -58,3 +59,36 @@ async def client(
         yield async_client
 
     app.dependency_overrides.clear()
+
+
+# was repeating register and login many times and decided to add this here, possible check
+async def register_and_login(client: AsyncClient, login: str) -> dict[str, str]:
+    """here I just create new account each time and return jtw"""
+    await client.post(
+        "/auth",
+        json={
+            "login": login,
+            "password": "some_random_password_nestor",
+            "repeat_password": "some_random_password_nestor",
+        },
+    )
+    response = await client.post(
+        "/login",
+        json={
+            "login": login,
+            "password": "some_random_password_nestor",
+        },
+    )
+    return {"Authorization": f"Bearer {response.json()['access_token']}"}
+
+
+@pytest.fixture(autouse=True)
+def clean_bucket() -> Generator[None, None, None]:
+    """to empty the bucket after each test"""
+    client = get_s3_client()
+    bucket = get_settings().s3_bucket
+
+    yield
+    response = client.list_objects_v2(Bucket=bucket)
+    for obj in response.get("Contents", []):
+        client.delete_object(Bucket=bucket, Key=obj["Key"])
