@@ -1,6 +1,6 @@
 from httpx2 import AsyncClient
 
-from tests.integration.conftest import register_and_login
+from tests.conftest import register_and_login
 
 
 async def test_create_project_makes_caller_owner(client: AsyncClient) -> None:

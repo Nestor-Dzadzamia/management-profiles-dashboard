@@ -1,6 +1,6 @@
 from httpx2 import AsyncClient
 
-from tests.integration.conftest import register_and_login
+from tests.conftest import register_and_login
 
 PDF = ("test.pdf", b"%PDF-1.4\ntest\n%%EOF", "application/pdf")
 DOCX_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
