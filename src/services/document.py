@@ -153,7 +153,7 @@ class DocumentService:
         self, project_id: int, user_id: int, filename: str, content_type: str, data: bytes
     ) -> DocumentDTO:
         extension = self._extension_for(content_type)
-        s3_key = f"projects/{project_id}/{uuid.uuid4().hex}.{extension}"
+        s3_key = f"projects/{project_id}/{uuid.uuid4().hex}{extension}"
         self._storage.upload(s3_key, data, content_type)
         return await self._documents.create(
             project_id=project_id,
@@ -175,7 +175,7 @@ class DocumentService:
         self, document: DocumentDTO, filename: str, content_type: str, data: bytes
     ) -> DocumentDTO:
         extension = self._extension_for(content_type)
-        new_key = f"projects/{document.project_id}/{uuid.uuid4().hex}.{extension}"
+        new_key = f"projects/{document.project_id}/{uuid.uuid4().hex}{extension}"
 
         self._storage.upload(new_key, data, content_type)
         dto = await self._documents.replace(document.id, new_key, filename, content_type, len(data))
