@@ -1,31 +1,62 @@
+from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, File, HTTPException, Response, UploadFile, status
+from pydantic import BaseModel
 
 from api.deps import CurrentUser, DocumentServiceDep, ProjectServiceDep, SessionDep
-from schemas.document import DocumentRead
-from services.document import DocumentNotFoundError, InvalidFileError, UnsupportedFileTypeError
+from services.document import (
+    DocumentDTO,
+    DocumentNotFoundError,
+    InvalidFileError,
+    UnsupportedFileTypeError,
+)
 from services.project import ProjectNotFoundError
+
+
+class DocumentResponse(BaseModel):
+    id: int
+    project_id: int
+    filename: str
+    content_type: str
+    size_bytes: int
+    uploaded_by_id: int | None
+    created_at: datetime
+    updated_at: datetime
+
+    @classmethod
+    def from_dto(cls, dto: DocumentDTO) -> "DocumentResponse":
+        return cls(
+            id=dto.id,
+            project_id=dto.project_id,
+            filename=dto.filename,
+            content_type=dto.content_type,
+            size_bytes=dto.size_bytes,
+            uploaded_by_id=dto.uploaded_by_id,
+            created_at=dto.created_at,
+            updated_at=dto.updated_at,
+        )
+
 
 router = APIRouter(tags=["documents"])
 
 
-@router.get("/project/{project_id}/documents", response_model=list[DocumentRead])
+@router.get("/project/{project_id}/documents", response_model=list[DocumentResponse])
 async def list_documents(
     project_id: int, user: CurrentUser, projects: ProjectServiceDep, documents: DocumentServiceDep
-) -> list[DocumentRead]:
+) -> list[DocumentResponse]:
     try:
         await projects.get(project_id, user.id)
     except ProjectNotFoundError:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Project not found") from None
 
     items = await documents.list_for_project(project_id)
-    return [DocumentRead(**d.__dict__) for d in items]
+    return [DocumentResponse.from_dto(d) for d in items]
 
 
 @router.post(
     "/project/{project_id}/documents",
-    response_model=list[DocumentRead],
+    response_model=list[DocumentResponse],
     status_code=status.HTTP_201_CREATED,
 )
 async def upload_documents(
@@ -35,7 +66,7 @@ async def upload_documents(
     documents: DocumentServiceDep,
     session: SessionDep,
     files: Annotated[list[UploadFile], File()],
-) -> list[DocumentRead]:
+) -> list[DocumentResponse]:
     try:
         await projects.get(project_id, user.id)
     except ProjectNotFoundError:
@@ -56,7 +87,7 @@ async def upload_documents(
         dto = await documents.upload(
             project_id, user.id, str(file.filename), str(file.content_type), data
         )
-        created.append(DocumentRead(**dto.__dict__))
+        created.append(DocumentResponse.from_dto(dto))
 
     await session.commit()
     return created
@@ -87,7 +118,7 @@ async def download_document(
     )
 
 
-@router.put("/document/{document_id}", response_model=DocumentRead)
+@router.put("/document/{document_id}", response_model=DocumentResponse)
 async def replace_document(
     document_id: int,
     user: CurrentUser,
@@ -95,7 +126,7 @@ async def replace_document(
     documents: DocumentServiceDep,
     session: SessionDep,
     file: Annotated[UploadFile, File()],
-) -> DocumentRead:
+) -> DocumentResponse:
     try:
         document = await documents.get(document_id)
     except DocumentNotFoundError:
@@ -119,7 +150,7 @@ async def replace_document(
     dto = await documents.replace(document, str(file.filename), str(file.content_type), data)
 
     await session.commit()
-    return DocumentRead(**dto.__dict__)
+    return DocumentResponse.from_dto(dto)
 
 
 @router.delete("/document/{document_id}", status_code=status.HTTP_204_NO_CONTENT)

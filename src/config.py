@@ -9,9 +9,9 @@ class Settings(BaseSettings):
     database_url: str
     jwt_secret: str
     jwt_ttl_seconds: int = 3600
-    s3_endpoint_url: str
-    s3_access_key: str
-    s3_secret_key: str
+    s3_endpoint_url: str | None = None
+    s3_access_key: str | None = None
+    s3_secret_key: str | None = None
     s3_bucket: str = "documents"
 
 
