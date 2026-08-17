@@ -27,7 +27,7 @@ Client
 FastAPI  ──────────►  S3 / MinIO      (document files)
   │
   ▼
-PostgreSQL                            (users, projects, memberships, document metadata)
+PostgreSQL                            (users, projects, memberships, roles, document metadata)
 ```
 
 Files themselves live in object storage; the database holds only their metadata and the key needed to find them.
