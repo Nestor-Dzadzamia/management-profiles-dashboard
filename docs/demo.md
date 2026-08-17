@@ -1,348 +1,298 @@
-# Demo requests
+# Demo
 
-Set the host once. We need this since EC2 gets new IP every restart.
+Run through Swagger at `<host>/docs`. (either localhost or AWS EC2)
 
-```bash
-HOST=http://REPLACE_WITH_EC2_IP:8000
-```
-
-Local instead:
+**Before starting**, reset to an empty database. the ids below assume a fresh start:
 
 ```bash
-HOST=http://localhost:8000
+docker compose -f docker-compose.prod.yml exec api alembic downgrade base
+docker compose -f docker-compose.prod.yml exec api alembic upgrade head
+aws s3 rm s3://dashboard-documents-nestor-2026 --recursive
 ```
+
+Have two small pdf files ready to upload.
 
 ---
 
 ## 1. Health
 
-Proves the service is up before anything else.
+`GET /health` → **Execute**
 
-```bash
-curl -s $HOST/health
+```json
+{"status": "ok"}
 ```
-
-Expect `{"status":"ok"}`
 
 ---
 
 ## 2. Register the owner
 
-```bash
-curl -s -X POST $HOST/auth \
-  -H "Content-Type: application/json" \
-  -d '{"login":"nestor","password":"some_random_password","repeat_password":"some_random_password"}'
+`POST /auth`
+
+```json
+{
+  "login": "nestor",
+  "password": "some_random_password",
+  "repeat_password": "some_random_password"
+}
 ```
 
-Expect **201**. Note there is no password or hash in the response.
+**201.** No password or hash in the response. the response schema does not include them, so they cannot leak.
 
-### Duplicate login is rejected
+### The same login twice
 
-```bash
-curl -s -w "\n%{http_code}\n" -X POST $HOST/auth \
-  -H "Content-Type: application/json" \
-  -d '{"login":"nestor","password":"some_random_password","repeat_password":"some_random_password"}'
+Execute the identical request again.
+
+**409**
+
+### Passwords that do not match
+
+```json
+{
+  "login": "someone",
+  "password": "some_random_password",
+  "repeat_password": "different_password"
+}
 ```
 
-Expect **409**
-
-### Mismatched passwords are rejected before any code runs
-
-```bash
-curl -s -w "\n%{http_code}\n" -X POST $HOST/auth \
-  -H "Content-Type: application/json" \
-  -d '{"login":"someone","password":"some_random_password","repeat_password":"different_password"}'
-```
-
-Expect **422**, validated by the schema rather than by hand.
+**422.** Rejected by the schema before any application code runs.
 
 ---
 
 ## 3. Log in
 
-```bash
-curl -s -X POST $HOST/login \
-  -H "Content-Type: application/json" \
-  -d '{"login":"nestor","password":"some_random_password"}'
+`POST /login`
+
+```json
+{
+  "login": "nestor",
+  "password": "some_random_password"
+}
 ```
 
-Copy the token:
+**200.** Copy `access_token`.
 
-```bash
-OWNER="Authorization: Bearer PASTE_TOKEN_HERE"
+Click **Authorize** at the top right, paste the token, Authorize, Close.
+
+### Wrong password
+
+```json
+{
+  "login": "nestor",
+  "password": "wrong_password"
+}
 ```
 
-### Wrong password and unknown user give the same answer
+**401**
 
-```bash
-curl -s -w "\n%{http_code}\n" -X POST $HOST/login \
-  -H "Content-Type: application/json" \
-  -d '{"login":"nestor","password":"wrong_password"}'
+### A user that does not exist
 
-curl -s -w "\n%{http_code}\n" -X POST $HOST/login \
-  -H "Content-Type: application/json" \
-  -d '{"login":"does_not_exist","password":"some_random_password"}'
+```json
+{
+  "login": "does_not_exist",
+  "password": "some_random_password"
+}
 ```
 
-Both **401**, identical. The endpoint cannot be used to discover which accounts exist.
+**401**, byte-for-byte identical to the previous response. The endpoint cannot be used to find out which accounts exist.
 
 ---
 
-## 4. Authentication is required
+## 4. Create a project
 
-```bash
-curl -s -w "\n%{http_code}\n" $HOST/projects
+`POST /projects`
+
+```json
+{
+  "name": "Nestor's Project",
+  "description": "Some random description"
+}
 ```
 
-Expect **401** with no token.
+**201**, with `role: "owner"`. The creator becomes the owner automatically, in the same transaction.
 
 ---
 
-## 5. Create a project
+## 5. Read
 
-```bash
-curl -s -X POST $HOST/projects \
-  -H "$OWNER" \
-  -H "Content-Type: application/json" \
-  -d '{"name":"Website redesign","description":"Q3 refresh"}'
-```
+`GET /projects`
 
-Expect **201**, `role: "owner"`. The creator becomes the owner automatically.
+A flat array. Related entities appear as ids, not nested objects.
+
+`GET /project/{project_id}/info` with `project_id` = **1**
 
 ---
 
-## 6. List and read
+## 6. Update
 
-```bash
-curl -s $HOST/projects -H "$OWNER"
+`PUT /project/{project_id}/info`, `project_id` = **1**
+
+```json
+{
+  "name": "Website redesign v2",
+  "description": "Q3 and Q4"
+}
 ```
 
-Flat response, related entities referenced by id.
-
-```bash
-curl -s $HOST/project/1/info -H "$OWNER"
-```
+**200**, and `updated_at` is now later than `created_at`. the database sets it, not the application.
 
 ---
 
-## 7. Update
+## 7. Upload a document
 
-```bash
-curl -s -X PUT $HOST/project/1/info \
-  -H "$OWNER" \
-  -H "Content-Type: application/json" \
-  -d '{"name":"Website redesign v2","description":"Q3 and Q4"}'
-```
+`POST /project/{project_id}/documents`, `project_id` = **1**
 
-Expect **200**, with `updated_at` later than `created_at`.
+Choose a pdf file → **Execute**
 
----
+**201.** Note `s3_key` is absent. it exists on the internal object but is not part of the response schema.
 
-## 8. Upload a document
+Show the object appearing in the S3 console under `projects/1/`. The stored name is generated, not the uploaded filename, so a hostile filename cannot become a storage path.
 
-```bash
-printf '%%PDF-1.4\ndemo file\n%%%%EOF' > /tmp/brief.pdf
+### A file type that is not allowed
 
-curl -s -X POST $HOST/project/1/documents \
-  -H "$OWNER" \
-  -F "files=@/tmp/brief.pdf;type=application/pdf"
-```
+Upload a `.txt` file.
 
-Expect **201**. Note `s3_key` is absent from the response, it is internal.
-
-### Only pdf and docx are accepted
-
-```bash
-echo "hello" > /tmp/notes.txt
-
-curl -s -w "\n%{http_code}\n" -X POST $HOST/project/1/documents \
-  -H "$OWNER" \
-  -F "files=@/tmp/notes.txt;type=text/plain"
-```
-
-Expect **415**
-
-### Several files in one request
-
-```bash
-printf '%%PDF-1.4\none\n%%%%EOF' > /tmp/one.pdf
-printf '%%PDF-1.4\ntwo\n%%%%EOF' > /tmp/two.pdf
-
-curl -s -X POST $HOST/project/1/documents \
-  -H "$OWNER" \
-  -F "files=@/tmp/one.pdf;type=application/pdf" \
-  -F "files=@/tmp/two.pdf;type=application/pdf"
-```
+**415**
 
 ---
 
-## 9. List and download
+## 8. List and download
 
-```bash
-curl -s $HOST/project/1/documents -H "$OWNER"
-```
+`GET /project/{project_id}/documents`, `project_id` = **1**
 
-```bash
-curl -s $HOST/document/1 -H "$OWNER"
-```
+`GET /document/{document_id}`, `document_id` = **1**
 
-Returns the file itself. The only endpoint that is not JSON.
+Returns the file itself. The only endpoint that does not return JSON.
 
-```bash
-curl -s $HOST/projects -H "$OWNER"
-```
+`GET /projects`
 
 The project now carries `document_ids`.
 
 ---
 
-## 10. Replace a document
+## 9. Replace a document
 
-```bash
-printf '%%PDF-1.4\nreplaced contents\n%%%%EOF' > /tmp/updated.pdf
+`PUT /document/{document_id}`, `document_id` = **1**
 
-curl -s -X PUT $HOST/document/1 \
-  -H "$OWNER" \
-  -F "file=@/tmp/updated.pdf;type=application/pdf"
-```
+Choose a different pdf → **Execute**
 
-Same id, new filename and size. The previous object is removed from storage.
+**200.** Same id, new filename and size. In S3 the old object is gone and a new one has appeared. the upload happens before the delete, so a failure midway leaves the original intact.
 
 ---
 
-## 11. A second user, and permissions
+## 10. A second user
 
-```bash
-curl -s -X POST $HOST/auth \
-  -H "Content-Type: application/json" \
-  -d '{"login":"giorgi","password":"some_random_password","repeat_password":"some_random_password"}'
+Open a **private browser window** so both sessions can be held at once, and use Swagger there for the participant.
 
-curl -s -X POST $HOST/login \
-  -H "Content-Type: application/json" \
-  -d '{"login":"giorgi","password":"some_random_password"}'
+`POST /auth`
+
+```json
+{
+  "login": "giorgi",
+  "password": "some_random_password",
+  "repeat_password": "some_random_password"
+}
 ```
 
-```bash
-GUEST="Authorization: Bearer PASTE_SECOND_TOKEN_HERE"
+`POST /login`
+
+```json
+{
+  "login": "giorgi",
+  "password": "some_random_password"
+}
 ```
 
-### A stranger gets 404, not 403
+Authorize with this token in the private window.
 
-```bash
-curl -s -w "\n%{http_code}\n" $HOST/project/1/info -H "$GUEST"
-```
+### A stranger cannot see the project
 
-Expect **404**. A 403 would confirm the project exists to someone with no right to know that.
+`GET /project/{project_id}/info`, `project_id` = **1**
 
-```bash
-curl -s $HOST/projects -H "$GUEST"
-```
+**404**, not 403. A 403 would confirm the project exists to somebody with no right to know that.
 
-Empty list.
+`GET /projects`
+
+Empty array.
 
 ---
 
-## 12. Invite
+## 11. Invite
 
-```bash
-curl -s -X POST "$HOST/project/1/invite?user=giorgi" -H "$OWNER"
-```
+Back in the **owner's window**.
 
-Expect **201**, role participant.
+`POST /project/{project_id}/invite`, `project_id` = **1**, `user` = **giorgi**
 
-```bash
-curl -s $HOST/project/1/info -H "$GUEST"
-```
+**201**, role participant.
 
-Now **200**, showing `role: "participant"`.
+In the **participant's window**: `GET /project/{project_id}/info` → now **200**, showing `role: "participant"`.
 
-### Inviting twice conflicts
+### Inviting the same person twice
 
-```bash
-curl -s -w "\n%{http_code}\n" -X POST "$HOST/project/1/invite?user=giorgi" -H "$OWNER"
-```
+**409**
 
-Expect **409**
+### Inviting somebody who does not exist
 
-### Inviting an unknown user
-
-```bash
-curl -s -w "\n%{http_code}\n" -X POST "$HOST/project/1/invite?user=nobody" -H "$OWNER"
-```
-
-Expect **404**
+`user` = **nobody** → **404**
 
 ---
 
-## 13. Participant permissions
+## 12. What a participant may and may not do
 
-Can edit:
+All in the participant's window.
 
-```bash
-curl -s -w "\n%{http_code}\n" -X PUT $HOST/project/1/info \
-  -H "$GUEST" \
-  -H "Content-Type: application/json" \
-  -d '{"name":"Edited by the participant","description":"still fine"}'
+**Can edit**. `PUT /project/1/info`
+
+```json
+{
+  "name": "Edited by the participant",
+  "description": "participants can modify"
+}
 ```
 
-Expect **200**
+**200**
 
-Can upload:
+**Can upload**. `POST /project/1/documents` with a pdf → **201**
 
-```bash
-curl -s -w "\n%{http_code}\n" -X POST $HOST/project/1/documents \
-  -H "$GUEST" \
-  -F "files=@/tmp/brief.pdf;type=application/pdf"
-```
+**Cannot delete the project**. `DELETE /project/1` → **403**
 
-Expect **201**
+This is the one place 403 is correct: the caller is a member, just not the owner. Everywhere else a missing permission returns 404.
 
-Cannot delete the project:
-
-```bash
-curl -s -w "\n%{http_code}\n" -X DELETE $HOST/project/1 -H "$GUEST"
-```
-
-Expect **403**. This is the one case where 403 is right, the caller is a member, just not the owner.
-
-Cannot invite:
-
-```bash
-curl -s -w "\n%{http_code}\n" -X POST "$HOST/project/1/invite?user=nestor" -H "$GUEST"
-```
-
-Expect **403**
+**Cannot invite**. `POST /project/1/invite`, `user` = **nestor** → **403**
 
 ---
 
-## 14. Delete a document
+## 13. Delete a document
 
-```bash
-curl -s -w "\n%{http_code}\n" -X DELETE $HOST/document/1 -H "$OWNER"
-```
+Owner's window. `DELETE /document/{document_id}`, `document_id` = **1**
 
-Expect **204**. The row goes first, then the stored file.
+**204.** The database row is removed first, then the stored file. There is no transaction spanning Postgres and S3, so the order is chosen deliberately: a failure leaves an orphaned file, which wastes space, rather than a row pointing at a file that is gone, which breaks downloads.
 
----
-
-## 15. Delete the project
-
-```bash
-curl -s -w "\n%{http_code}\n" -X DELETE $HOST/project/1 -H "$OWNER"
-```
-
-Expect **204**.
-
-```bash
-curl -s $HOST/projects -H "$OWNER"
-```
-
-Empty. The documents went with it, both the database rows, by cascade, and the files in storage.
+Show it disappearing from S3.
 
 ---
 
-## Notes for the demo
+## 14. Delete the project
 
-- `-w "\n%{http_code}\n"` prints the status code, which matters for the error cases
-- Swagger at `$HOST/docs` covers everything except the file uploads, which it cannot render
-- Have the S3 console open to show objects appearing and disappearing during steps 8, 14 and 15
+`DELETE /project/{project_id}`, `project_id` = **1**
+
+**204**
+
+`GET /projects` → empty.
+
+The documents went with it. Their database rows by foreign key cascade, and their files by an explicit cleanup step in the delete handler.
+
+Show `projects/1/` is now empty in S3.
+
+---
+
+## Points worth making as they come up
+
+**Flat responses.** Everything is one level deep, related entities referenced by id.
+
+**404 rather than 403** for callers with no access, so the API does not confirm that resources exist to people who should not know.
+
+**Identical 401** for unknown login and wrong password.
+
+**Ownership is not a column** on projects. it is a membership row with the owner role. Storing it twice would let the two copies disagree.
+
+**Cascades** handle the database side of deletion; storage cleanup is explicit because the two systems cannot share a transaction.

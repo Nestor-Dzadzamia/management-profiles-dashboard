@@ -56,24 +56,24 @@ async def list_documents(
 
 @router.post(
     "/project/{project_id}/documents",
-    response_model=list[DocumentResponse],
+    response_model=DocumentResponse,
     status_code=status.HTTP_201_CREATED,
 )
-async def upload_documents(
+async def upload_document(
     project_id: int,
     user: CurrentUser,
     projects: ProjectServiceDep,
     documents: DocumentServiceDep,
     session: SessionDep,
-    files: Annotated[list[UploadFile], File()],
-) -> list[DocumentResponse]:
+    file: Annotated[UploadFile, File()],
+) -> DocumentResponse:
     try:
         await projects.get(project_id, user.id)
     except ProjectNotFoundError:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Project not found") from None
 
     try:
-        documents.validate([(f.filename, f.content_type) for f in files])
+        documents.validate([(file.filename, file.content_type)])
     except InvalidFileError:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Invalid file") from None
     except UnsupportedFileTypeError:
@@ -81,16 +81,13 @@ async def upload_documents(
             status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, "Unsupported file type"
         ) from None
 
-    created = []
-    for file in files:
-        data = await file.read()
-        dto = await documents.upload(
-            project_id, user.id, str(file.filename), str(file.content_type), data
-        )
-        created.append(DocumentResponse.from_dto(dto))
+    data = await file.read()
+    dto = await documents.upload(
+        project_id, user.id, str(file.filename), str(file.content_type), data
+    )
 
     await session.commit()
-    return created
+    return DocumentResponse.from_dto(dto)
 
 
 @router.get("/document/{document_id}")
