@@ -11,7 +11,7 @@ from services.document import (
     InvalidFileError,
     UnsupportedFileTypeError,
 )
-from services.project import ProjectNotFoundError
+from services.project import OWNER, ProjectNotFoundError
 
 
 class DocumentResponse(BaseModel):
@@ -164,9 +164,12 @@ async def delete_document(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Document not found") from None
 
     try:
-        await projects.get(document.project_id, user.id)
+        project = await projects.get(document.project_id, user.id)
     except ProjectNotFoundError:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Document not found") from None
+
+    if project.role != OWNER:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only the owner can delete documents")
 
     await documents.delete(document)
     await session.commit()
