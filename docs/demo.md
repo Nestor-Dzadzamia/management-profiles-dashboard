@@ -1,8 +1,8 @@
-# Demo
+# Demo walkthrough
 
-Run through Swagger at `<host>/docs`. (either localhost or AWS EC2)
+Run through Swagger at `<host>/docs`. Every body below is copy-paste.
 
-**Before starting**, reset to an empty database. the ids below assume a fresh start:
+**Before starting**, reset to an empty database: the ids assume a fresh start:
 
 ```bash
 docker compose -f docker-compose.prod.yml exec api alembic downgrade base
@@ -10,7 +10,9 @@ docker compose -f docker-compose.prod.yml exec api alembic upgrade head
 aws s3 rm s3://dashboard-documents-nestor-2026 --recursive
 ```
 
-Have two small pdf files ready to upload.
+Have two small pdf files and one txt file ready.
+
+Open Swagger a second time in a **private window**: that holds the participant's session, since Swagger stores one token at a time.
 
 ---
 
@@ -36,7 +38,7 @@ Have two small pdf files ready to upload.
 }
 ```
 
-**201.** No password or hash in the response. the response schema does not include them, so they cannot leak.
+**201.** No password or hash in the response: the response schema doesn't include them, so they can't leak.
 
 ### The same login twice
 
@@ -44,7 +46,7 @@ Execute the identical request again.
 
 **409**
 
-### Passwords that do not match
+### Passwords that don't match
 
 ```json
 {
@@ -55,6 +57,18 @@ Execute the identical request again.
 ```
 
 **422.** Rejected by the schema before any application code runs.
+
+### Login too short
+
+```json
+{
+  "login": "ab",
+  "password": "some_random_password",
+  "repeat_password": "some_random_password"
+}
+```
+
+**422**
 
 ---
 
@@ -69,9 +83,7 @@ Execute the identical request again.
 }
 ```
 
-**200.** Copy `access_token`.
-
-Click **Authorize** at the top right, paste the token, Authorize, Close.
+**200.** Copy `access_token`, click **Authorize**, paste, Authorize, Close.
 
 ### Wrong password
 
@@ -84,7 +96,7 @@ Click **Authorize** at the top right, paste the token, Authorize, Close.
 
 **401**
 
-### A user that does not exist
+### A user that doesn't exist
 
 ```json
 {
@@ -93,38 +105,63 @@ Click **Authorize** at the top right, paste the token, Authorize, Close.
 }
 ```
 
-**401**, byte-for-byte identical to the previous response. The endpoint cannot be used to find out which accounts exist.
+**401**, identical to the previous response. The endpoint can't be used to discover which accounts exist.
 
 ---
 
-## 4. Create a project
+## 4. Authentication is required
+
+Click **Authorize → Logout**, then `GET /projects` → **401**
+
+Log back in and re-authorize before continuing.
+
+---
+
+## 5. Create a project
 
 `POST /projects`
 
 ```json
 {
-  "name": "Nestor's Project",
-  "description": "Some random description"
+  "name": "Website redesign",
+  "description": "Q3 refresh"
 }
 ```
 
-**201**, with `role: "owner"`. The creator becomes the owner automatically, in the same transaction.
+**201**, `role: "owner"`, `id: 1`. The creator becomes owner automatically, in the same transaction.
+
+### Empty name
+
+```json
+{
+  "name": "",
+  "description": "should fail"
+}
+```
+
+**422**
 
 ---
 
-## 5. Read
+## 6. Read
 
 `GET /projects`
 
 A flat array. Related entities appear as ids, not nested objects.
 
-`GET /project/{project_id}/info` with `project_id` = **1**
+`GET /project/{project_id}/info` with **1**
+
+### A project that doesn't exist
+
+`GET /project/{project_id}/info` with **999**
+
+**404**
 
 ---
 
-## 6. Update
+## 7. Update
 
-`PUT /project/{project_id}/info`, `project_id` = **1**
+`PUT /project/{project_id}/info`, id **1**
 
 ```json
 {
@@ -133,55 +170,75 @@ A flat array. Related entities appear as ids, not nested objects.
 }
 ```
 
-**200**, and `updated_at` is now later than `created_at`. the database sets it, not the application.
+**200**, and `updated_at` is now later than `created_at`: the database sets it, not the application.
 
 ---
 
-## 7. Upload a document
+## 8. Upload a document
 
-`POST /project/{project_id}/documents`, `project_id` = **1**
+`POST /project/{project_id}/documents`, id **1**
 
-Choose a pdf file → **Execute**
+Choose a pdf → **Execute**
 
-**201.** Note `s3_key` is absent. it exists on the internal object but is not part of the response schema.
+**201.** Note `s3_key` is absent: it exists internally but isn't part of the response schema.
 
-Show the object appearing in the S3 console under `projects/1/`. The stored name is generated, not the uploaded filename, so a hostile filename cannot become a storage path.
+**Show S3**: object under `projects/1/`, with a generated name rather than the uploaded filename.
 
-### A file type that is not allowed
+### A type that isn't allowed
 
-Upload a `.txt` file.
+Upload the txt file.
 
 **415**
 
+### Uploading to a project that doesn't exist
+
+`POST /project/999/documents` with a pdf
+
+**404**
+
 ---
 
-## 8. List and download
+## 9. List and download
 
-`GET /project/{project_id}/documents`, `project_id` = **1**
+`GET /project/{project_id}/documents`, id **1**
 
-`GET /document/{document_id}`, `document_id` = **1**
+`GET /document/{document_id}`, id **1**
 
-Returns the file itself. The only endpoint that does not return JSON.
+Returns the file itself. The only endpoint that isn't JSON.
 
 `GET /projects`
 
 The project now carries `document_ids`.
 
----
+### A document that doesn't exist
 
-## 9. Replace a document
+`GET /document/{document_id}` with **999**
 
-`PUT /document/{document_id}`, `document_id` = **1**
-
-Choose a different pdf → **Execute**
-
-**200.** Same id, new filename and size. In S3 the old object is gone and a new one has appeared. the upload happens before the delete, so a failure midway leaves the original intact.
+**404**
 
 ---
 
-## 10. A second user
+## 10. Replace a document
 
-Open a **private browser window** so both sessions can be held at once, and use Swagger there for the participant.
+`PUT /document/{document_id}`, id **1**
+
+Choose the second pdf → **Execute**
+
+**200.** Same id, new filename and size.
+
+**Show S3**: the old object is gone, a new one has appeared. The upload happens before the delete, so a failure midway leaves the original intact.
+
+### Replacing with a disallowed type
+
+Upload the txt file to the same endpoint.
+
+**415**
+
+---
+
+## 11. A second user
+
+In the **private window**.
 
 `POST /auth`
 
@@ -204,43 +261,57 @@ Open a **private browser window** so both sessions can be held at once, and use 
 
 Authorize with this token in the private window.
 
-### A stranger cannot see the project
+### A stranger can't see the project
 
-`GET /project/{project_id}/info`, `project_id` = **1**
+`GET /project/{project_id}/info`, id **1**
 
-**404**, not 403. A 403 would confirm the project exists to somebody with no right to know that.
+**404**, not 403. A 403 would confirm the project exists to someone with no right to know that. Same response as for a project that genuinely doesn't exist: deliberately indistinguishable.
 
-`GET /projects`
+`GET /projects` → empty array
 
-Empty array.
+### A stranger can't reach its documents either
+
+`GET /project/1/documents` → **404**
+
+`GET /document/1` → **404**
+
+`DELETE /document/1` → **404**
 
 ---
 
-## 11. Invite
+## 12. Invite
 
 Back in the **owner's window**.
 
-`POST /project/{project_id}/invite`, `project_id` = **1**, `user` = **giorgi**
+`POST /project/{project_id}/invite`, id **1**, `user` = **giorgi**
 
 **201**, role participant.
 
-In the **participant's window**: `GET /project/{project_id}/info` → now **200**, showing `role: "participant"`.
+In the **participant's window**: `GET /project/1/info` → now **200**, `role: "participant"`.
 
 ### Inviting the same person twice
 
 **409**
 
-### Inviting somebody who does not exist
+### Inviting someone who doesn't exist
 
 `user` = **nobody** → **404**
 
+### Inviting to a project that doesn't exist
+
+`POST /project/999/invite`, `user` = **giorgi** → **404**
+
 ---
 
-## 12. What a participant may and may not do
+## 13. What a participant may and may not do
 
-All in the participant's window.
+All in the **participant's window**.
 
-**Can edit**. `PUT /project/1/info`
+**Can read**: `GET /project/1/documents` → **200**
+
+**Can download**: `GET /document/1` → **200**
+
+**Can edit**: `PUT /project/1/info`
 
 ```json
 {
@@ -251,48 +322,52 @@ All in the participant's window.
 
 **200**
 
-**Can upload**. `POST /project/1/documents` with a pdf → **201**
+**Can upload**: `POST /project/1/documents` with a pdf → **201**
 
-**Cannot delete the project**. `DELETE /project/1` → **403**
+**Cannot delete the project**: `DELETE /project/1` → **403**
 
-This is the one place 403 is correct: the caller is a member, just not the owner. Everywhere else a missing permission returns 404.
+The one place 403 is correct: the caller is a member, just not the owner. Everywhere else a missing permission returns 404.
 
-**Cannot invite**. `POST /project/1/invite`, `user` = **nestor** → **403**
-
----
-
-## 13. Delete a document
-
-Owner's window. `DELETE /document/{document_id}`, `document_id` = **1**
-
-**204.** The database row is removed first, then the stored file. There is no transaction spanning Postgres and S3, so the order is chosen deliberately: a failure leaves an orphaned file, which wastes space, rather than a row pointing at a file that is gone, which breaks downloads.
-
-Show it disappearing from S3.
+**Cannot invite**: `POST /project/1/invite`, `user` = **nestor** → **403**
 
 ---
 
-## 14. Delete the project
+## 14. Delete a document
 
-`DELETE /project/{project_id}`, `project_id` = **1**
+Owner's window. `DELETE /document/{document_id}`, id **1**
+
+**204.** The database row goes first, then the stored file. There's no transaction spanning Postgres and S3, so the order is deliberate: a failure leaves an orphaned file, which wastes space, rather than a row pointing at a file that's gone, which breaks downloads.
+
+**Show S3**: object gone.
+
+`GET /document/1` → **404**
+
+---
+
+## 15. Delete the project
+
+`DELETE /project/{project_id}`, id **1**
 
 **204**
 
-`GET /projects` → empty.
+`GET /projects` → empty
 
-The documents went with it. Their database rows by foreign key cascade, and their files by an explicit cleanup step in the delete handler.
+The documents went with it: rows by foreign key cascade, files by an explicit cleanup step.
 
-Show `projects/1/` is now empty in S3.
+**Show S3**: `projects/1/` is empty.
 
 ---
 
 ## Points worth making as they come up
 
-**Flat responses.** Everything is one level deep, related entities referenced by id.
+**Flat responses.** One level deep, related entities by id.
 
-**404 rather than 403** for callers with no access, so the API does not confirm that resources exist to people who should not know.
+**404 rather than 403** for anyone without access, so the API doesn't confirm what exists to people who shouldn't know. 403 appears once: a member with the wrong role.
 
 **Identical 401** for unknown login and wrong password.
 
-**Ownership is not a column** on projects. it is a membership row with the owner role. Storing it twice would let the two copies disagree.
+**Ownership isn't a column** on projects: it's a membership row with the owner role. Storing it twice would let the copies disagree.
 
-**Cascades** handle the database side of deletion; storage cleanup is explicit because the two systems cannot share a transaction.
+**Storage keys are generated**, never derived from the filename. Otherwise `../../etc/passwd.pdf` becomes a path.
+
+**Cascades handle the database** on delete; storage cleanup is explicit, because the two systems can't share a transaction.—
